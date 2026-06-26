@@ -1,26 +1,16 @@
-import React from "react"
+import React, { useState, useEffect } from "react"
 import { Link, useLocation } from "react-router-dom"
 import { 
-  LayoutDashboard, 
-  Users, 
-  Clock, 
-  Linkedin, 
-  PhoneCall, 
-  FileText, 
   TrendingUp, 
-  Settings as SettingsIcon,
   Menu,
-  ChevronLeft,
-  ShieldCheck,
-  UserCheck,
-  History,
-  Sparkles,
-  Zap
+  ChevronLeft
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { getTabOrder, ALL_NAV_ITEMS } from "@/lib/navigation"
+import type { NavItemData } from "@/lib/navigation"
 
 interface NavItemProps {
   to: string
@@ -49,22 +39,46 @@ const NavItem = ({ to, icon: Icon, label, active, collapsed }: NavItemProps) => 
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const [collapsed, setCollapsed] = React.useState(false)
+  const [navItems, setNavItems] = useState<NavItemData[]>(() => {
+    const order = getTabOrder()
+    const sortedItems = order
+      .map(id => ALL_NAV_ITEMS.find(item => item.id === id))
+      .filter(Boolean) as NavItemData[]
+    
+    const missingItems = ALL_NAV_ITEMS.filter(item => !order.includes(item.id))
+    return [...sortedItems, ...missingItems]
+  })
   const location = useLocation()
 
-  const navItems = [
-    { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/leads", icon: Users, label: "Lead Command Center" },
-    { to: "/research", icon: Sparkles, label: "AI Lead Research" },
-    { to: "/follow-ups", icon: Clock, label: "Follow-Up System" },
-    { to: "/outreach", icon: Linkedin, label: "LinkedIn Outreach" },
-    { to: "/discovery", icon: PhoneCall, label: "Discovery Call Prep" },
-    { to: "/proposals", icon: FileText, label: "Proposal Agent" },
-    { to: "/onboarding", icon: UserCheck, label: "Client Onboarding" },
-    { to: "/sessions", icon: History, label: "Session Recaps" },
-    { to: "/content", icon: Zap, label: "Content Repurposer" },
-    { to: "/dm3", icon: ShieldCheck, label: "David's Mighty 3" },
-    { to: "/revenue", icon: TrendingUp, label: "Revenue Dashboard" },
-  ]
+  useEffect(() => {
+    const updateNav = () => {
+      const order = getTabOrder()
+      const sortedItems = order
+        .map(id => ALL_NAV_ITEMS.find(item => item.id === id))
+        .filter(Boolean) as NavItemData[]
+      
+      // Ensure any missing items are added at the end
+      const missingItems = ALL_NAV_ITEMS.filter(item => !order.includes(item.id))
+      
+      setNavItems([...sortedItems, ...missingItems])
+    }
+
+    updateNav()
+
+    // Listen for storage changes to update navigation order
+    window.addEventListener('storage', updateNav)
+    // Custom event for same-window updates
+    window.addEventListener('purpose-flow-nav-updated', updateNav)
+
+    return () => {
+      window.removeEventListener('storage', updateNav)
+      window.removeEventListener('purpose-flow-nav-updated', updateNav)
+    }
+  }, [])
+
+  // Split navItems into main and bottom (Settings)
+  // We'll keep Settings at the bottom if it's there, but follow the user's order if they put it elsewhere?
+  // The default order puts Settings at the end.
 
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden">
@@ -102,25 +116,19 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         <ScrollArea className="flex-1 py-4 px-3">
           <nav className="space-y-1">
             {navItems.map((item) => (
-              <NavItem
-                key={item.to}
-                {...item}
-                active={location.pathname === item.to}
-                collapsed={collapsed}
-              />
+              <React.Fragment key={item.id}>
+                {item.id === 'settings' && navItems.indexOf(item) > 0 && (
+                  <Separator className="my-4" />
+                )}
+                <NavItem
+                  to={item.to}
+                  icon={item.icon}
+                  label={item.label}
+                  active={location.pathname === item.to}
+                  collapsed={collapsed}
+                />
+              </React.Fragment>
             ))}
-          </nav>
-          
-          <Separator className="my-4" />
-          
-          <nav className="space-y-1">
-            <NavItem
-              to="/settings"
-              icon={SettingsIcon}
-              label="Settings"
-              active={location.pathname === "/settings"}
-              collapsed={collapsed}
-            />
           </nav>
         </ScrollArea>
 

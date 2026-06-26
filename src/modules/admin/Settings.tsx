@@ -1,23 +1,121 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Building, 
   Shield, 
   Save,
-  Check
+  Check,
+  GripVertical
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+  getTabOrder, 
+  saveTabOrder, 
+  ALL_NAV_ITEMS
+} from '@/lib/navigation';
+import type { NavItemData } from '@/lib/navigation';
+
+import {
+  DndContext, 
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors
+} from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+interface SortableItemProps {
+  id: string;
+  item: NavItemData;
+}
+
+const SortableNavItem = ({ id, item }: SortableItemProps) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : 0,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const Icon = item.icon;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-3 p-3 border rounded-lg bg-background hover:bg-muted/30 transition-colors mb-2 group"
+    >
+      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 -ml-1 text-muted-foreground hover:text-foreground">
+        <GripVertical className="h-4 w-4" />
+      </div>
+      <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center text-primary">
+        <Icon className="h-4 w-4" />
+      </div>
+      <span className="text-sm font-medium">{item.label}</span>
+      <span className="ml-auto text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded uppercase">{item.id}</span>
+    </div>
+  );
+};
 
 const Settings = () => {
   const [saved, setSaved] = useState(false);
+  const [tabOrder, setTabOrder] = useState<string[]>([]);
+  
+  useEffect(() => {
+    setTabOrder(getTabOrder());
+  }, []);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setTabOrder((items) => {
+        const oldIndex = items.indexOf(active.id as string);
+        const newIndex = items.indexOf(over.id as string);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
 
   const handleSave = () => {
+    saveTabOrder(tabOrder);
     setSaved(true);
+    // Trigger custom event for Layout component to update
+    window.dispatchEvent(new Event('purpose-flow-nav-updated'));
     setTimeout(() => setSaved(false), 2000);
   };
+
+  const orderedItems = tabOrder
+    .map(id => ALL_NAV_ITEMS.find(item => item.id === id))
+    .filter(Boolean) as NavItemData[];
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -35,6 +133,7 @@ const Settings = () => {
       <Tabs defaultValue="profile" className="space-y-4">
         <TabsList>
           <TabsTrigger value="profile">Business Profile</TabsTrigger>
+          <TabsTrigger value="navigation">Navigation</TabsTrigger>
           <TabsTrigger value="offers">Offers & Pricing</TabsTrigger>
           <TabsTrigger value="links">Links & Integrations</TabsTrigger>
           <TabsTrigger value="voice">Brand Voice</TabsTrigger>
@@ -69,6 +168,33 @@ const Settings = () => {
                   defaultValue={`To your growth,\nDr. Celso Nolberto\nCEO, Purpose To Function LLC`}
                 />
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="navigation" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Navigation Order</CardTitle>
+              <CardDescription>Drag and drop to rearrange the sidebar menu items. Save to apply changes.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <DndContext 
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext 
+                  items={tabOrder}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="max-w-md">
+                    {orderedItems.map((item) => (
+                      <SortableNavItem key={item.id} id={item.id} item={item} />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
             </CardContent>
           </Card>
         </TabsContent>
